@@ -26,6 +26,7 @@ The architecture is organized into five layers:
 ### 1. Sensor Health
 
 | Attribute | Detail |
+|---|---|
 | **Sensor** | SHT31 (temperature + humidity) |
 | **Interface** | I2C, address 0x44 |
 | **Purpose** | Provides primary sensor evidence for drift, disconnection, and out-of-range detection |
@@ -42,6 +43,7 @@ The architecture is organized into five layers:
 ### 2. Electrical Health
 
 | Attribute | Detail |
+|---|---|
 | **IC** | INA226 (16-bit, I2C) |
 | **Interface** | I2C, address 0x40 |
 | **Purpose** | Provides electrical evidence for voltage, current, and power anomalies |
@@ -59,6 +61,7 @@ The architecture is organized into five layers:
 ### 3. Controller Health
 
 | Attribute | Detail |
+|---|---|
 | **Source** | Internal MCU diagnostics |
 | **Purpose** | Provides controller evidence for temperature, resets, watchdog, and communication anomalies |
 | **Methods** | Internal temperature sensor, reset count (RTC backup register), watchdog status, free RAM, stack usage, communication error rate |
@@ -76,6 +79,7 @@ The architecture is organized into five layers:
 ### 4. Feature Extraction
 
 | Attribute | Detail |
+|---|---|
 | **Input** | Sensor + Electrical + Controller evidence vectors |
 | **Output** | 24 features × 10 timesteps = 240 values |
 | **Window** | 10 samples (1 second at 10 Hz) |
@@ -99,6 +103,7 @@ The architecture is organized into five layers:
 ### 5. TinyML Inference
 
 | Attribute | Detail |
+|---|---|
 | **Model** | Autoencoder + Random Forest |
 | **Framework** | TensorFlow Lite Micro |
 | **Quantization** | int8 |
@@ -125,6 +130,7 @@ The architecture is organized into five layers:
 ### 6. Health Fusion
 
 | Attribute | Detail |
+|---|---|
 | **Inputs** | Sensor evidence (10) + Electrical evidence (11) + Controller evidence (8) + TinyML score (1) |
 | **Output** | Fault confidence (0–100%) |
 | **Weights** | Sensor: 0.35, Electrical: 0.25, Controller: 0.15, TinyML: 0.25 |
@@ -138,6 +144,7 @@ The architecture is organized into five layers:
 ### 7. State Machine
 
 | State | Confidence | LED | Response |
+|---|---|---|---|
 | **Normal** | 75–100% | Green | Continue operation |
 | **Warning** | 50–75% | Yellow | Log, indicate on display |
 | **Degraded** | 25–50% | Orange | Isolate faulty sensor, use fallback |
@@ -160,6 +167,7 @@ The architecture is organized into five layers:
 ### 8. Display
 
 | Attribute | Detail |
+|---|---|
 | **Display** | 0.96" OLED (I2C, 128×64) |
 | **Content** | State, confidence, active fault, evidence summary |
 | **LEDs** | 5 LEDs: Power (blue), Normal (green), Warning (yellow), Degraded (orange), Critical (red) |
@@ -171,6 +179,7 @@ The architecture is organized into five layers:
 ### 9. Response
 
 | Attribute | Detail |
+|---|---|
 | **Actuation** | 5V SPDT relay (10A contact rating) |
 | **Driver** | ULN2003 Darlington array |
 | **Isolation** | Opto-isolator (4N35) |
@@ -189,6 +198,7 @@ The architecture is organized into five layers:
 ### 10. Logging
 
 | Attribute | Detail |
+|---|---|
 | **Primary Storage** | microSD card (SPI, 8GB) |
 | **Backup Storage** | W25Q64 external flash (SPI, 8MB) |
 | **RTC** | DS3231 (I2C, ±2ppm accuracy) |
@@ -203,6 +213,7 @@ The architecture is organized into five layers:
 ### 11. Communication (RS485 Modbus RTU)
 
 | Attribute | Detail |
+|---|---|
 | **Protocol** | RS485, Modbus RTU |
 | **Transceiver** | MAX13487 (isolated) |
 | **Baud Rate** | 9600 / 19200 / 115200 (configurable) |
@@ -218,6 +229,7 @@ The architecture is organized into five layers:
 ### 12. External Watchdog (TPS3813)
 
 | Attribute | Detail |
+|---|---|
 | **IC** | TPS3813K33 |
 | **Timeout** | 100 ms |
 | **Feed Rate** | Every 50 ms (MCU toggles GPIO) |
@@ -236,6 +248,7 @@ The architecture is organized into five layers:
 ## Interface Summary
 
 | Bus | Pins | Devices |
+|---|---|---|
 | **I2C1** | PB8 (SCL), PB9 (SDA) | SHT31, INA226, OLED, DS3231 |
 | **SPI1** | PA5 (SCK), PA6 (MISO), PA7 (MOSI) | microSD, W25Q64, MCP4131 |
 | **USART1** | PA9 (TX), PA10 (RX), PA8 (DE) | RS485 (MAX13487) |
@@ -249,6 +262,7 @@ The architecture is organized into five layers:
 ## Power Budget
 
 | Rail | Voltage | Max Current | Consumers |
+|---|---|---|---|
 | **12V** | 12V | 1A | Input, relay, load |
 | **5V** | 5V | 1A | Relay, OLED, SD |
 | **3.3V** | 3.3V | 500 mA | MCU, sensors, RTC |
@@ -270,11 +284,19 @@ The architecture is organized into five layers:
 ## Revision History
 
 | Version | Date | Changes |
+|---|---|---|
 | 1.0 | 28 Sep 2026 | Initial architecture documentation |
 
 ---
 
 ## Related Documents
+
+- [Architecture Diagram (PDF)](SwasthEdge_Architecture.pdf)
+- [Architecture Diagram (PNG)](SwasthEdge_Architecture.png)
+- [Pin Mapping](PinMapping.md)
+- [Block Specifications](BlockSpecs.md)
+
+---
 
 - [Architecture Diagram (PDF)](SwasthEdge_Architecture.pdf)
 - [Architecture Diagram (PNG)](SwasthEdge_Architecture.png)
