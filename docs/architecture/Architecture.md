@@ -289,15 +289,6 @@ The architecture is organized into five layers:
 
 ---
 
-## Related Documents
-
-- [Architecture Diagram (PDF)](SwasthEdge_Architecture.pdf)
-- [Architecture Diagram (PNG)](SwasthEdge_Architecture.png)
-- [Pin Mapping](PinMapping.md)
-- [Block Specifications](BlockSpecs.md)
-
----
-
 - [Architecture Diagram (PDF)](SwasthEdge_Architecture.pdf)
 - [Architecture Diagram (PNG)](SwasthEdge_Architecture.png)
 
