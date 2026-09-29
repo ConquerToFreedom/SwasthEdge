@@ -16,7 +16,4 @@ Low-cost self-diagnosing edge controller for industrial sensor reliability
 - `/ppt` – Presentation slides
 - `/video` – Demo video links
   
-## Competitions
-- Vishwakarma Awards 2026-27
-- TECHgium 10th Edition
-- Seva First Innovation Challenge
+
