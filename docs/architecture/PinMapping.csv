@@ -1,0 +1,30 @@
+STM32 Pin,Function,Bus/Type,Arduino,Direction,Notes
+PB8,I2C1_SCL,I2C,D15,Output,SHT31/INA226/OLED/DS3231
+PB9,I2C1_SDA,I2C,D14,Bidirectional,SHT31/INA226/OLED/DS3231
+PA5,SPI1_SCK,SPI,D13,Output,microSD/W25Q64/MCP4131
+PA6,SPI1_MISO,SPI,D12,Input,microSD/W25Q64/MCP4131
+PA7,SPI1_MOSI,SPI,D11,Output,microSD/W25Q64/MCP4131
+PA4,CS_SD,SPI (CS),A2,Output,microSD chip select
+PB0,CS_FLASH,SPI (CS),A3,Output,W25Q64 chip select
+PB10,CS_POT,SPI (CS),D6,Output,MCP4131 chip select
+PA9,USART1_TX,UART,D8,Output,RS485 TX to MAX13487 DI
+PA10,USART1_RX,UART,D2,Input,RS485 RX from MAX13487 RO
+PA8,RS485_DE,GPIO,D7,Output,RS485 direction control
+PA2,USART2_TX,UART,D1,Output,Debug TX (ST-Link VCP)
+PA3,USART2_RX,UART,D0,Input,Debug RX (ST-Link VCP)
+PB3,RELAY_MAIN,GPIO,D3,Output,Main relay
+PB4,LED_GREEN,GPIO,D4,Output,Normal state
+PB5,LED_YELLOW,GPIO,D5,Output,Warning state
+PC7,LED_ORANGE,GPIO,D9,Output,Degraded state
+PA0,LED_RED,GPIO,A0,Output,Critical state
+PA1,WDI,GPIO,A1,Output,External watchdog feed
+PC1,FAULT_DISCONNECT,GPIO,A4,Output,Relay sensor disconnect
+PC6,FAULT_SAG_PWM,TIM3_CH1,Morpho CN10,Output,MOSFET voltage sag
+PC8,FAULT_CURRENT,GPIO,Morpho CN10,Output,Relay abnormal current
+PC9,FAULT_COMM,GPIO,Morpho CN10,Output,Relay comm failure
+PB6,RELAY_FEEDBACK,GPIO,D10,Input,Relay sense contact
+PB2,SD_DETECT,GPIO,Morpho CN10,Input,SD card detect
+PC0,VBAT_SENSE,ADC,A5,Input,Battery voltage
+NRST,RESET,System,Morpho CN7,Input,External watchdog reset
+PA13,SWDIO,Debug,On-board,Bidirectional,Programming/debug
+PA14,SWCLK,Debug,On-board,Input,Programming/debug
