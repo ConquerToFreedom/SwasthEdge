@@ -53,3 +53,16 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Embedded firmware build outputs
+*.lst
+*.bin
+firmware/build/
+firmware/Debug/
+firmware/Release/
+
+# CubeMX metadata
+.mxproject
+
+# IDE folders
+.vscode/
