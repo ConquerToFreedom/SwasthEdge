@@ -64,5 +64,8 @@ firmware/Release/
 # CubeMX metadata
 .mxproject
 
-# IDE folders
+# IDE folders — personal
 .vscode/
+
+# CubeIDE workspace metadata — do NOT commit
+.metadata/
