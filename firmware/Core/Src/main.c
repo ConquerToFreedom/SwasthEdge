@@ -26,6 +26,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "state_machine.h"
+#include "feature_extraction.h"
+#include "health_fusion.h"
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
 
 /* USER CODE END Includes */
 
@@ -58,6 +64,30 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Redirect printf to UART2 (debug output via ST-Link VCP) */
+int __io_putchar(int ch) {
+    extern UART_HandleTypeDef huart2;
+    HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, 100);
+    return ch;
+}
+
+/* Non-blocking blink counter */
+static uint32_t blink_counter = 0;
+
+/* Timer callback — called by HAL on timer events */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    if (htim->Instance == TIM6) {
+        /* 10 Hz — sampling tick */
+        blink_counter++;
+    }
+    if (htim->Instance == TIM7) {
+        /* 1 Hz — inference tick */
+    }
+    if (htim->Instance == TIM14) {
+        /* 20 Hz — watchdog feed */
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);  // WDI toggle
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -99,6 +129,76 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  printf("\r\n\r\n");
+printf("====================================\r\n");
+printf("  SwasthEdge Boot OK\r\n");
+printf("====================================\r\n");
+
+/* Print clock configuration */
+printf("SYSCLK: %lu Hz\r\n", HAL_RCC_GetSysClockFreq());
+printf("HCLK:   %lu Hz\r\n", HAL_RCC_GetHCLKFreq());
+printf("PCLK1:  %lu Hz\r\n", HAL_RCC_GetPCLK1Freq());
+printf("PCLK2:  %lu Hz\r\n", HAL_RCC_GetPCLK2Freq());
+printf("\r\n");
+
+/* Start timers */
+HAL_TIM_Base_Start_IT(&htim6);
+HAL_TIM_Base_Start_IT(&htim7);
+HAL_TIM_Base_Start_IT(&htim14);
+printf("Timers started: TIM6 (10Hz), TIM7 (1Hz), TIM14 (20Hz)\r\n");
+printf("\r\n");
+
+/* Test feature extraction with synthetic data */
+printf("=== FEATURE EXTRACTION TEST ===\r\n");
+float test_buffer[100];
+for (int i = 0; i < 100; i++) {
+    test_buffer[i] = 25.0f + 0.5f * sinf(i * 0.1f) + 0.05f * ((i * 7) % 10 - 5);
+}
+
+float features[8];
+extract_features(test_buffer, 100, features);
+
+printf("  Mean:     %.3f\r\n", features[FEAT_MEAN]);
+printf("  Variance: %.5f\r\n", features[FEAT_VARIANCE]);
+printf("  Slope:    %.5f\r\n", features[FEAT_SLOPE]);
+printf("  RMS:      %.3f\r\n", features[FEAT_RMS]);
+printf("  EWMA:     %.3f\r\n", features[FEAT_EWMA]);
+printf("  CUSUM:    %.5f\r\n", features[FEAT_CUSUM]);
+printf("  Rate:     %.5f\r\n", features[FEAT_RATE]);
+printf("  Range:    %.3f\r\n", features[FEAT_RANGE]);
+printf("\r\n");
+
+/* Test state machine */
+printf("=== STATE MACHINE TEST ===\r\n");
+state_machine_init();
+for (float conf = 100.0f; conf >= 0.0f; conf -= 10.0f) {
+    /* Feed 3 times to satisfy consecutive readings requirement */
+    state_machine_update(conf);
+    state_machine_update(conf);
+    state_machine_update(conf);
+    printf("  Confidence %.0f%% -> %s\r\n", conf, state_machine_get_name());
+}
+printf("\r\n");
+
+/* Test health fusion */
+printf("=== HEALTH FUSION TEST ===\r\n");
+float fused1 = health_fusion(100.0f, 100.0f, 100.0f, 100.0f, 100.0f);
+printf("  All healthy:             %.1f%%\r\n", fused1);
+
+float fused2 = health_fusion(50.0f, 100.0f, 100.0f, 100.0f, 100.0f);
+printf("  Sensor degraded to 50:   %.1f%%\r\n", fused2);
+
+float fused3 = health_fusion(50.0f, 50.0f, 100.0f, 100.0f, 100.0f);
+printf("  Sensor + Electrical:     %.1f%%\r\n", fused3);
+
+float fused4 = health_fusion(25.0f, 25.0f, 50.0f, 50.0f, 25.0f);
+printf("  Multiple failures:       %.1f%%\r\n", fused4);
+printf("\r\n");
+
+/* Init state machine for main loop */
+state_machine_init();
+printf("Setup complete. Entering main loop...\r\n");
+printf("\r\n");
 
   /* USER CODE END 2 */
 
@@ -109,6 +209,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    /* Blink user LED (PA5) every 500ms */
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
