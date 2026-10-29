@@ -21,5 +21,8 @@ Low-cost self-diagnosing edge controller for industrial sensor reliability
 - [Architecture Diagram (PDF)](docs/architecture/SwasthEdge_Architecture.pdf)
 - [Complete Pin Mapping (Markdown)](docs/architecture/PinMapping.md)
 - [Pin Mapping (CSV for Excel)](docs/architecture/PinMapping.csv)
-  
+
+## 📂 Project Media & Sources
+- [Google Drive Folder for Image Sources](https://drive.google.com/drive/folders/1q7pAoYTXLVP09OUnn3g1jxPzuWNZ1AVV)
+
 

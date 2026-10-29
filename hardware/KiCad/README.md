@@ -1,18 +1,15 @@
-# SwasthEdge experimental KiCad snapshot (2026-10-19)
+# SwasthEdge KiCad project
 
-This folder preserves the separately supplied KiCad design snapshot for review. It is kept separate from the repository's existing `SwasthEdge.kicad_*` project because these files are a distinct revision.
+Open `SwasthEdge/SwasthEdge.kicad_pro` with KiCad 10.
 
-## Files
+## Current project files
 
-- `SwasthEdge_2026-10-19.kicad_pro` — KiCad project settings
-- `SwasthEdge_2026-10-19.kicad_sch` — schematic
-- `SwasthEdge_2026-10-19.kicad_pcb` — PCB layout
-- `SwasthEdge_2026-10-19.net` — supplied exported netlist; its local source path was made repository-relative
-- `SwasthEdge_2026-10-19_footprint_report.txt` — supplied footprint report; the machine-local path was removed. The report names a `powermod_experimental_all_footprints_fixed (3)` netlist, so it may describe an intermediate snapshot rather than this exact file set.
-- `SwasthEdge_2026-10-19_board_preview.png` — supplied 3D board placement preview
+- `SwasthEdge/SwasthEdge.kicad_sch` — current schematic. The supplied October 22, 2026 file matches this repository file byte-for-byte.
+- `SwasthEdge/SwasthEdge.kicad_pcb` — updated with the supplied `powermod_experimental_all_footprints_routed (2).kicad_pcb`, renamed to match the project.
+- `SwasthEdge/SwasthEdge.kicad_pro` — existing KiCad project settings.
 
-The `.kicad_prl` files were not included because KiCad generates them as per-user editor state.
+## Related artifacts and validation
 
-## Review status
+`SwasthEdge/SwasthEdge.net`, `SwasthEdge/SwasthEdge_footprint_report.txt`, and `SwasthEdge/SwasthEdge_board_preview.png` are from the earlier October 19 snapshot and were not regenerated for the updated board. Do not use them to validate the October 22 PCB.
 
-The image shows component placement. This contribution does not claim ERC or DRC success, completed routing, or fabrication readiness. Review the schematic and PCB in KiCad and run ERC/DRC before using this snapshot for manufacturing.
+The PCB was supplied with “routed” in its filename, but this update does not establish that routing passes KiCad DRC or that the schematic passes ERC. Run ERC and DRC in KiCad before treating the board as fabrication-ready.
