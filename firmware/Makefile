@@ -4,17 +4,12 @@
 
 # ------------------------------------------------
 # Generic Makefile (based on gcc)
-#
-# ChangeLog :
-#	2017-02-10 - Several enhancements + project update mode
-#   2015-07-22 - first version
 # ------------------------------------------------
 
 ######################################
 # target
 ######################################
 TARGET = firmware
-
 
 ######################################
 # building variables
@@ -23,7 +18,6 @@ TARGET = firmware
 DEBUG = 1
 # optimization
 OPT = -Og
-
 
 #######################################
 # paths
@@ -70,6 +64,22 @@ App/state_machine.c \
 App/feature_extraction.c \
 App/health_fusion.c
 
+# Find all TFLM C++ source files
+TFLM_SOURCES = \
+$(wildcard lib/tflite-micro/tensorflow/lite/micro/*.cc) \
+$(wildcard lib/tflite-micro/tensorflow/lite/micro/kernels/*.cc)
+
+# Exclude ALL test and helper files
+TFLM_SOURCES := $(filter-out %_test.cc, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out %_test_common.cc, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out %test_helpers.cc, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out %test_helper_custom_ops.cc, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out %mock_micro_graph.cc, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out %fake_micro_context.cc, $(TFLM_SOURCES))
+
+# Add your app's C++ file
+CXX_SOURCES = $(TFLM_SOURCES) App/model_inference.cc
+
 # ASM sources
 ASM_SOURCES =  \
 startup_stm32f446xx.s
@@ -77,21 +87,19 @@ startup_stm32f446xx.s
 # ASMM sources
 ASMM_SOURCES = 
 
-
-
 #######################################
 # binaries
 #######################################
 PREFIX = arm-none-eabi-
-# The gcc compiler bin path can be either defined in make command via GCC_PATH variable (> make GCC_PATH=xxx)
-# either it can be added to the PATH environment variable.
 ifdef GCC_PATH
 CC = $(GCC_PATH)/$(PREFIX)gcc
+CXX = $(GCC_PATH)/$(PREFIX)g++
 AS = $(GCC_PATH)/$(PREFIX)gcc -x assembler-with-cpp
 CP = $(GCC_PATH)/$(PREFIX)objcopy
 SZ = $(GCC_PATH)/$(PREFIX)size
 else
 CC = $(PREFIX)gcc
+CXX = $(PREFIX)g++
 AS = $(PREFIX)gcc -x assembler-with-cpp
 CP = $(PREFIX)objcopy
 SZ = $(PREFIX)size
@@ -104,25 +112,20 @@ BIN = $(CP) -O binary -S
 #######################################
 # cpu
 CPU = -mcpu=cortex-m4
-
 # fpu
 FPU = -mfpu=fpv4-sp-d16
-
 # float-abi
 FLOAT-ABI = -mfloat-abi=hard
-
 # mcu
 MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
 
 # macros for gcc
-# AS defines
 AS_DEFS = 
-
-# C defines
 C_DEFS =  \
 -DUSE_HAL_DRIVER \
--DSTM32F446xx
-
+-DSTM32F446xx \
+-DTF_LITE_STATIC_MEMORY \
+-DCMSIS_NN
 
 # AS includes
 AS_INCLUDES = 
@@ -134,22 +137,30 @@ C_INCLUDES =  \
 -IDrivers/STM32F4xx_HAL_Driver/Inc \
 -IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
--IDrivers/CMSIS/Include
-
+-IDrivers/CMSIS/Include \
+-Ilib/tflite-micro \
+-Ilib/tflite-micro/tensorflow \
+-Ilib/tflite-micro/third_party/flatbuffers/include \
+-Ilib/tflite-micro/third_party/gemmlowp \
+-Ilib/tflite-micro/third_party/kissfft \
+-Ilib/tflite-micro/third_party/ruy
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
 CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
+# C++ specific flags (Required for TFLite)
+CXXFLAGS += $(CFLAGS) -fno-exceptions -fno-rtti -fno-threadsafe-statics
+
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
+CXXFLAGS += -g -gdwarf-2
 endif
-
 
 # Generate dependency information
 CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
-
+CXXFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
 
 #######################################
 # LDFLAGS
@@ -165,29 +176,40 @@ LDFLAGS = $(MCU) -specs=nano.specs -u _printf_float -T$(LDSCRIPT) $(LIBDIR) $(LI
 # default action: build all
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
 
-
 #######################################
 # build the application
 #######################################
 # list of objects
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(C_SOURCES:.c=.o)))
 vpath %.c $(sort $(dir $(C_SOURCES)))
+
+# Add C++ objects
+OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(CXX_SOURCES:.cc=.o)))
+vpath %.cc $(sort $(dir $(CXX_SOURCES)))
+
 # list of ASM program objects
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASM_SOURCES:.s=.o)))
 vpath %.s $(sort $(dir $(ASM_SOURCES)))
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASMM_SOURCES:.S=.o)))
 vpath %.S $(sort $(dir $(ASMM_SOURCES)))
 
+# Compile C files
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
 
+# Compile C++ files
+$(BUILD_DIR)/%.o: %.cc Makefile | $(BUILD_DIR) 
+	$(CXX) -c $(CXXFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.cc=.lst)) $< -o $@
+
+# Compile ASM files
 $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
 	$(AS) -c $(CFLAGS) $< -o $@
 $(BUILD_DIR)/%.o: %.S Makefile | $(BUILD_DIR)
 	$(AS) -c $(CFLAGS) $< -o $@
 
+# LINK THE ELF (Use CXX to link because of C++ stdlib dependencies)
 $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) $(OBJECTS) $(LDFLAGS) -o $@
 	$(SZ) $@
 
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
@@ -196,6 +218,7 @@ $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 	$(BIN) $< $@	
 	
+
 $(BUILD_DIR):
 	mkdir $@		
 
