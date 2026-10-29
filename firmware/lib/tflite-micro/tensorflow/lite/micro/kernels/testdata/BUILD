@@ -1,0 +1,53 @@
+load("@tflm_pip_deps//:requirements.bzl", "requirement")
+load("//python:py_rules.bzl", "tflm_py_library", "tflm_py_test")
+load(
+    "//tensorflow/lite/micro:build_def.bzl",
+    "tflm_cc_library",
+)
+
+package(
+    default_visibility = ["//tensorflow/lite/micro/kernels:__pkg__"],
+    licenses = ["notice"],
+)
+
+####################################
+# C++ libraries
+####################################
+
+tflm_cc_library(
+    name = "conv_test_data",
+    srcs = ["conv_test_data.cc"],
+    hdrs = ["conv_test_data.h"],
+    deps = ["//tensorflow/lite/micro:micro_common"],
+)
+
+tflm_cc_library(
+    name = "lstm_test_data",
+    srcs = ["lstm_test_data.cc"],
+    hdrs = [
+        "lstm_test_data.h",
+    ],
+    deps = [
+        "//tensorflow/lite/micro:micro_common",
+        "//tensorflow/lite/micro:test_helpers",
+        "//tensorflow/lite/micro/kernels:lstm_shared",
+        "//tensorflow/lite/micro/kernels/internal:tensor_utils_no_eigen",
+    ],
+)
+
+tflm_py_library(
+    name = "lstm_test_data_utils",
+    srcs = ["lstm_test_data_utils.py"],
+    deps = [
+        requirement("numpy"),
+    ],
+)
+
+tflm_py_test(
+    name = "lstm_test_data_generator_test",
+    srcs = ["lstm_test_data_generator_test.py"],
+    deps = [
+        ":lstm_test_data_utils",
+        requirement("numpy"),
+    ],
+)

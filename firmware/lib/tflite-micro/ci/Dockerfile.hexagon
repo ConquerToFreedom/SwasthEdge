@@ -1,0 +1,65 @@
+# ==============================================================================
+# Qualcomm Hexagon Toolchain Container for TFLite Micro
+#
+# Supports:
+#   - Qualcomm Hexagon DSP (v66)
+#   - Hexagon SDK 3.5.1
+#   - Hexagon Tools 8.3.07 (hexagon-clang++, hexagon-sim)
+#
+# Usage:
+#
+# --- Build locally ---
+#   docker build -f ci/Dockerfile.hexagon -t hexagon .
+#
+# --- Build and push to GHCR.IO ---
+#   export HEXAGON_VERSION=0.6
+#   docker build --no-cache -f ci/Dockerfile.hexagon -t ghcr.io/tflm-bot/hexagon:$HEXAGON_VERSION .
+#   docker push ghcr.io/tflm-bot/hexagon:$HEXAGON_VERSION
+#
+# ==============================================================================
+
+FROM ghcr.io/tflm-bot/hexagon:0.4 AS toolchain
+
+FROM python:3.11-bookworm
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    libncurses5 \
+    libtinfo5 \
+    unzip \
+    wget \
+    zip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    numpy \
+    Pillow
+
+# Copy the Hexagon SDK, tools, and prebuilt core library
+COPY --from=toolchain /root/Qualcomm /root/Qualcomm
+
+ENV HEXAGON_TFLM_CORE=/root/Qualcomm/hexagon_tflm_core.a
+ENV HEXAGON_CPU_VER=v66
+ENV HEXAGON_SDK_ROOT=/root/Qualcomm/Hexagon_SDK/3.5.1
+ENV HEXAGON_ROOT=${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/
+ENV HEXAGON_TOOL_VER=8.3.07
+ENV PATH=${HEXAGON_ROOT}/${HEXAGON_TOOL_VER}/Tools/bin:${PATH}
+
+# Configure git safe directories
+RUN git config --system --add safe.directory '*'
+
+# Pre-bake Bazel via Bazelisk matching .bazelversion
+ENV BAZELISK_HOME="/opt/bazelisk"
+COPY .bazelversion ci/install_bazelisk.sh /install/
+RUN chmod +x /install/install_bazelisk.sh && \
+    /install/install_bazelisk.sh && \
+    rm -rf /install
+
+WORKDIR /workspace
+
+CMD ["hexagon-clang++"]

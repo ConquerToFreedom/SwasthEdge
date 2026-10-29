@@ -1,0 +1,193 @@
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+#
+# TFLM Bazel configuration file.
+
+# The semver-format version label embedded in build outputs when and where
+# stamping is used. Note TFLM does not currently publish semver-versioned
+# releases; however, this value is used where a version label is required, such
+# as in the Python distribution package.
+build --embed_label=0
+
+# Get stamp values from a script's output
+build --workspace_status_command=./tools/workspace_status.sh
+
+# Automatically enable the config matching the host OS
+common --enable_platform_specific_config
+build --features=system_include_paths
+
+# Use the following C++ standard
+build:linux --cxxopt=-std=c++17
+build:macos --cxxopt=-std=c++17
+build:windows --cxxopt=/std:c++17
+
+# Optimization for Windows
+build:windows --incompatible_strict_action_env
+build:windows --features=compiler_param_file
+build:windows --enable_runfiles
+
+# Common options for CI
+build:_ci_base --curses=no
+build:_ci_base --color=no
+build:_ci_base --noshow_progress
+build:_ci_base --noshow_loading_progress
+build:_ci_base --show_timestamps
+build:_ci_base --terminal_columns=0
+build:_ci_base --verbose_failures
+build:_ci_base --test_output=errors
+build:_ci_base --keep_going
+# Avoid sandbox directory reuse race conditions on container OverlayFS.
+build:_ci_base --noreuse_sandbox_directories
+
+build:ci --config=_ci_base
+build:ci --action_env=CC=clang
+build:ci --action_env=CXX=clang++
+build:ci --repo_env=CC=clang
+build:ci --repo_env=CXX=clang++
+build:ci --features=layering_check
+build:ci --process_headers_in_dependencies
+
+# Windows CI options
+build:windows_ci --config=_ci_base
+build:windows_ci --config=windows
+build:windows_ci --jobs=10
+build:windows_ci --show_progress
+build:windows_ci --show_progress_rate_limit=60
+build:windows_ci --workspace_status_command="cmd /c exit 0"
+build:windows_ci --announce_rc
+build:windows_ci --build_tests_only
+build:windows_ci --build_python_zip=false
+
+# Common options for sanitizers
+build:_sanitizer_base --action_env=CC=clang
+build:_sanitizer_base --action_env=CXX=clang++
+build:_sanitizer_base --repo_env=CC=clang
+build:_sanitizer_base --repo_env=CXX=clang++
+build:_sanitizer_base --strip=never
+build:_sanitizer_base --copt=-g
+build:_sanitizer_base --copt=-O3
+build:_sanitizer_base --copt=-fno-omit-frame-pointer
+
+# When building with the address sanitizer
+# E.g., bazel build --config asan
+build:asan --config=_sanitizer_base
+build:asan --copt=-fsanitize=address
+build:asan --copt=-DADDRESS_SANITIZER
+build:asan --linkopt=-fsanitize=address
+
+# When building with the memory sanitizer
+# E.g., bazel build --config msan
+build:msan --config=_sanitizer_base
+build:msan --copt=-fsanitize=memory
+build:msan --copt=-DMEMORY_SANITIZER
+build:msan --linkopt=-fsanitize=memory
+
+# When building with the undefined behavior sanitizer
+# E.g., bazel build --config ubsan
+build:ubsan --config=_sanitizer_base
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --linkopt=-fsanitize=undefined
+build:ubsan --linkopt=-lubsan
+
+# Suppress warnings from external repositories
+build --output_filter=^//
+test --output_filter=^//
+
+# Embedded Cortex-M configurations
+build:cortex-m0 --platforms=//tensorflow/lite/micro/tools/toolchains:cortex_m0_test_platform
+test:cortex-m0 --run_under=//tensorflow/lite/micro/tools/toolchains/arm:run_m0
+
+build:cortex-m4 --platforms=//tensorflow/lite/micro/tools/toolchains:cortex_m4_test_platform
+test:cortex-m4 --run_under=//tensorflow/lite/micro/tools/toolchains/arm:run_m4
+
+build:cortex-m4-cmsis-nn --platforms=//tensorflow/lite/micro/tools/toolchains:cortex_m4_cmsis_nn_test_platform
+test:cortex-m4-cmsis-nn --run_under=//tensorflow/lite/micro/tools/toolchains/arm:run_m4
+
+build:cortex-m55 --platforms=//tensorflow/lite/micro/tools/toolchains:cortex_m55_ref_test_platform
+test:cortex-m55 --run_under=//tensorflow/lite/micro/tools/toolchains/arm:run_m55
+
+build:cortex-m55-cmsis-nn --platforms=//tensorflow/lite/micro/tools/toolchains:cortex_m55_test_platform
+test:cortex-m55-cmsis-nn --run_under=//tensorflow/lite/micro/tools/toolchains/arm:run_m55
+
+# Corstone-300 + Ethos-U55 FVP configurations
+build:corstone-env --test_env=PATH
+build:corstone-env --test_env=FVP_BIN
+
+build:corstone-300-ethos-u --config=corstone-env
+build:corstone-300-ethos-u --platforms=//tensorflow/lite/micro/tools/toolchains:corstone300_test_platform
+test:corstone-300-ethos-u --run_under=//tensorflow/lite/micro/tools/toolchains/arm/corstonefvp:run_corstone300
+
+# Embedded RISC-V configurations
+build:riscv32 --platforms=//tensorflow/lite/micro/tools/toolchains:riscv32_test_platform
+test:riscv32 --run_under=//tensorflow/lite/micro/tools/toolchains/riscv:run_riscv32
+
+# Embedded Qualcomm Hexagon configurations
+build:hexagon-env --action_env=HEXAGON_SDK_ROOT
+build:hexagon-env --action_env=HEXAGON_ROOT
+build:hexagon-env --action_env=HEXAGON_TOOL_VER
+build:hexagon-env --action_env=HEXAGON_CPU_VER
+build:hexagon-env --action_env=HEXAGON_TFLM_CORE
+build:hexagon-env --action_env=PATH
+build:hexagon-env --test_env=PATH
+build:hexagon-env --sandbox_add_mount_pair=/root/Qualcomm
+
+build:hexagon --config=hexagon-env
+build:hexagon --platforms=//tensorflow/lite/micro/tools/toolchains:hexagon_test_platform
+test:hexagon --run_under=//tensorflow/lite/micro/tools/toolchains/hexagon:run_hexagon
+
+build:hexagon-opt --config=hexagon
+
+# Embedded Xtensa configurations
+build:xtensa-env --action_env=LM_LICENSE_FILE
+build:xtensa-env --action_env=PATH
+build:xtensa-env --test_env=LM_LICENSE_FILE
+build:xtensa-env --test_env=PATH
+
+build:xtensa-fusion-f1 --config=xtensa-env
+build:xtensa-fusion-f1 --platforms=//tensorflow/lite/micro/tools/toolchains/xtensa:fusion_f1_platform
+test:xtensa-fusion-f1 --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_fusion_f1
+
+build:xtensa-hifi3z --config=xtensa-env
+build:xtensa-hifi3z --platforms=//tensorflow/lite/micro/tools/toolchains/xtensa:hifi3z_platform
+test:xtensa-hifi3z --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_hifi3z
+
+build:xtensa-hifi5 --config=xtensa-env
+build:xtensa-hifi5 --platforms=//tensorflow/lite/micro/tools/toolchains/xtensa:hifi5_platform
+test:xtensa-hifi5 --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_hifi5
+
+build:xtensa-vision-p6 --config=xtensa-env
+build:xtensa-vision-p6 --platforms=//tensorflow/lite/micro/tools/toolchains/xtensa:vision_p6_platform
+test:xtensa-vision-p6 --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_vision_p6
+
+# Xtensa NNLib optimized configurations
+build:xtensa-fusion-f1-nnlib --config=xtensa-env
+build:xtensa-fusion-f1-nnlib --platforms=//tensorflow/lite/micro/tools/toolchains:xtensa_fusion_f1_test_platform
+test:xtensa-fusion-f1-nnlib --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_fusion_f1
+
+build:xtensa-hifi3z-nnlib --config=xtensa-env
+build:xtensa-hifi3z-nnlib --platforms=//tensorflow/lite/micro/tools/toolchains:xtensa_hifi3z_test_platform
+test:xtensa-hifi3z-nnlib --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_hifi3z
+
+build:xtensa-hifi5-nnlib --config=xtensa-env
+build:xtensa-hifi5-nnlib --platforms=//tensorflow/lite/micro/tools/toolchains:xtensa_hifi5_test_platform
+test:xtensa-hifi5-nnlib --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_hifi5
+
+build:xtensa-vision-p6-nnlib --config=xtensa-env
+build:xtensa-vision-p6-nnlib --platforms=//tensorflow/lite/micro/tools/toolchains:xtensa_vision_p6_test_platform
+test:xtensa-vision-p6-nnlib --run_under=//tensorflow/lite/micro/tools/toolchains/xtensa:run_vision_p6
+
+# Hooks for defining local configuration
+try-import ../bazelrc.local
+try-import bazelrc.local

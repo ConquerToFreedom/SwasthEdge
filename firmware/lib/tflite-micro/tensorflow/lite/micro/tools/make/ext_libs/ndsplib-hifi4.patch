@@ -1,0 +1,55 @@
+diff --git a/library/fft/fft/fft_real24x24_hifi4.c b/library/fft/fft/fft_real24x24_hifi4.c
+index 82f48e2..bdce59e 100644
+--- a/library/fft/fft/fft_real24x24_hifi4.c
++++ b/library/fft/fft/fft_real24x24_hifi4.c
+@@ -78,7 +78,7 @@
+   x,y           should not overlap
+   x,y           aligned on a 8-bytes boundary
+ -------------------------------------------------------------------------*/
+-DISCARD_FUN( int,
++DISCARD_FUN_FOR_NONVOID_RETURN( int,
+              fft_real24x24,
+              (f24* y,
+               int32_t* x,
+diff --git a/library/include/NatureDSP_types.h b/library/include/NatureDSP_types.h
+index 0069361..c0f411f 100644
+--- a/library/include/NatureDSP_types.h
++++ b/library/include/NatureDSP_types.h
+@@ -332,7 +332,9 @@ typedef struct tagComplex32_t
+   #define NASSERT(x) 
+   #define restrict 
+ #elif defined (COMPILER_XTENSA)
++#if !defined restrict
+   #define restrict __restrict
++#endif
+   #define onchip
+   #define NASSERT(x) {(void)__builtin_expect((x)!=0,1);}
+ #else
+diff --git a/library/include_private/__renaming__.h b/library/include_private/__renaming__.h
+index 25a4d34..8e12d59 100644
+--- a/library/include_private/__renaming__.h
++++ b/library/include_private/__renaming__.h
+@@ -562,7 +562,7 @@
+ #define 	fft_16x16_stage_first_scl2_DFT3	NatureDSP_Signal_579
+ #define 	fft_16	NatureDSP_Signal_580
+ #define 	fft_128	NatureDSP_Signal_581
+-#define 	expftblf	NatureDSP_Signal_582
++//#define 	expftblf	NatureDSP_Signal_582
+ #define 	dct4_twd	NatureDSP_Signal_583
+ #define 	dct4_twd_512	NatureDSP_Signal_584
+ #define 	dct4_twd_32	NatureDSP_Signal_585
+diff --git a/library/include_private/common.h b/library/include_private/common.h
+index d647af4..25d0ca8 100644
+--- a/library/include_private/common.h
++++ b/library/include_private/common.h
+@@ -187,6 +187,10 @@ F_UNDERSCORE STRINGIZE(name) ":\n"          \
+ __attribute__ ((section ("/DISCARD/"))) \
+ retval_type name arglist \
+ {  }
++#define DISCARD_FUN_FOR_NONVOID_RETURN(retval_type,name,arglist) \
++__attribute__ ((section ("/DISCARD/"))) \
++retval_type name arglist \
++{ return (retval_type) 0; }
+ #endif
+ 
+ #ifdef __cplusplus

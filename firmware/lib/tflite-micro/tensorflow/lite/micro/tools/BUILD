@@ -1,0 +1,287 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@tflm_pip_deps//:requirements.bzl", "requirement")
+load(
+    "//python:py_rules.bzl",
+    "pybind_extension",
+    "tflm_py_binary",
+    "tflm_py_library",
+    "tflm_py_test",
+)
+load("//tensorflow/lite/micro:build_def.bzl", "INCOMPATIBLE_WITH_WINDOWS")
+load("//tensorflow/lite/micro:extra_rules.bzl", "tflm_application_friends")
+load("//third_party/flatbuffers:build_defs.bzl", "flatbuffer_cc_library", "flatbuffer_py_library")
+
+package(
+    default_visibility = ["//:__subpackages__"],
+    licenses = ["notice"],
+)
+
+package_group(
+    name = "tflm_tools",
+    packages = ["//tensorflow/lite/micro/tools/..."],
+)
+
+package_group(
+    name = "application_friends",
+    packages = tflm_application_friends(),
+)
+
+tflm_py_library(
+    name = "flatbuffer_utils",
+    srcs = ["flatbuffer_utils.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        requirement("flatbuffers"),
+        "//tensorflow/lite/micro/python:schema_py",
+        "//tensorflow/lite/micro/python:schema_util",
+    ],
+)
+
+tflm_py_library(
+    name = "test_utils",
+    srcs = ["test_utils.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        requirement("flatbuffers"),
+        "//tensorflow/lite/micro/python:schema_py",
+    ],
+)
+
+tflm_py_test(
+    name = "flatbuffer_utils_test",
+    srcs = ["flatbuffer_utils_test.py"],
+    deps = [
+        ":flatbuffer_utils",
+        ":test_utils",
+        "//tensorflow/lite/micro/python:schema_py",
+    ],
+)
+
+tflm_py_binary(
+    name = "randomize_weights",
+    srcs = ["randomize_weights.py"],
+    deps = [
+        ":flatbuffer_utils",
+    ],
+)
+
+tflm_py_binary(
+    name = "strip_strings",
+    srcs = ["strip_strings.py"],
+    deps = [
+        ":flatbuffer_utils",
+    ],
+)
+
+tflm_py_binary(
+    name = "visualize",
+    srcs = ["visualize.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//tensorflow/lite/micro/python:schema_py",
+        requirement("numpy"),
+    ],
+)
+
+tflm_py_test(
+    name = "visualize_test",
+    srcs = ["visualize_test.py"],
+    deps = [
+        ":test_utils",
+        ":visualize",
+    ],
+)
+
+tflm_py_library(
+    name = "generate_cc_arrays_lib",
+    srcs = ["generate_cc_arrays.py"],
+    deps = [
+        requirement("pillow"),
+        requirement("numpy"),
+    ],
+)
+
+tflm_py_binary(
+    name = "generate_cc_arrays",
+    srcs = ["generate_cc_arrays.py"],
+    deps = [
+        requirement("pillow"),
+        requirement("numpy"),
+    ],
+)
+
+tflm_py_binary(
+    name = "requantize_flatbuffer",
+    srcs = [
+        "requantize_flatbuffer.py",
+        "requantize_flatbuffer_utils.py",
+    ],
+    deps = [
+        ":flatbuffer_utils",
+        "//tensorflow/lite/micro/python:schema_py",
+    ],
+)
+
+tflm_py_test(
+    name = "requantize_flatbuffer_test",
+    srcs = ["requantize_flatbuffer_test.py"],
+    data = [
+        "simple_fc_int16.tflite",
+        "simple_fc_int8.tflite",
+    ],
+    main = "requantize_flatbuffer_test.py",
+    tags = [
+        "noasan",
+        "nomsan",  # Python doesn't like these symbols
+        "noubsan",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+        ":flatbuffer_utils",
+        ":requantize_flatbuffer",
+        requirement("numpy"),
+        "//python/tflite_micro:runtime",
+    ],
+)
+
+pybind_extension(
+    name = "tflite_flatbuffer_align_wrapper",  # :tflite_flatbuffer_align_wrapper.so
+    srcs = [
+        "tflite_flatbuffer_align_wrapper.cc",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+        "//tensorflow/lite/micro/schema:schema_fbs",
+        "@flatbuffers",
+    ],
+)
+
+tflm_py_binary(
+    name = "tflite_flatbuffer_align",
+    srcs = [
+        "tflite_flatbuffer_align.py",
+    ],
+    data = [
+        ":tflite_flatbuffer_align_wrapper.so",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+    ],
+)
+
+tflm_py_library(
+    name = "model_transforms_utils",
+    srcs = ["model_transforms_utils.py"],
+    data = [
+        ":tflite_flatbuffer_align_wrapper.so",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    visibility = [
+        ":application_friends",
+        ":tflm_tools",
+    ],
+    deps = [
+        "//tensorflow/lite/micro/python:schema_py",
+        "//tensorflow/lite/micro/python:schema_util",
+    ],
+)
+
+tflm_py_library(
+    name = "tflm_model_transforms_lib",
+    srcs = ["tflm_model_transforms_lib.py"],
+    data = [
+        ":tflite_flatbuffer_align",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    visibility = [
+        ":application_friends",
+        ":tflm_tools",
+        "//:__subpackages__",
+    ],
+    deps = [
+        ":flatbuffer_utils",
+        ":model_transforms_utils",
+        requirement("numpy"),
+        "//python/tflite_micro:runtime",
+    ],
+)
+
+cc_binary(
+    name = "layer_by_layer_output_tool",
+    srcs = ["layer_by_layer.cc"],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+        ":layer_by_layer_schema",
+        "//tensorflow/lite/micro:micro_allocator",
+        "//tensorflow/lite/micro:micro_common",
+        "//tensorflow/lite/micro:micro_compatibility",
+        "//tensorflow/lite/micro:micro_context",
+        "//tensorflow/lite/micro:micro_framework",
+        "//tensorflow/lite/micro:micro_log",
+        "//tensorflow/lite/micro:micro_resource_variable",
+        "//tensorflow/lite/micro:micro_utils",
+        "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro/kernels:kernel_util",
+        "//tensorflow/lite/micro/schema:schema_fbs",
+        "//tensorflow/lite/micro/tools/benchmarking:op_resolver",
+        "@flatbuffers",
+    ],
+)
+
+tflm_py_binary(
+    name = "tflm_model_transforms",
+    srcs = ["tflm_model_transforms.py"],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+        ":tflm_model_transforms_lib",
+    ],
+)
+
+tflm_py_test(
+    name = "tflm_model_transforms_test",
+    srcs = ["tflm_model_transforms_test.py"],
+    data = [
+        "//tensorflow/lite/micro/models",
+    ],
+    main = "tflm_model_transforms_test.py",
+    tags = [
+        "noasan",
+        "nomsan",
+        "noubsan",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+        ":tflm_model_transforms_lib",
+        "//tensorflow/lite/micro/examples/recipes:resource_variables_lib",
+    ],
+)
+
+tflm_py_binary(
+    name = "layer_by_layer_debugger",
+    srcs = ["layer_by_layer_debugger.py"],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    deps = [
+        ":flatbuffer_utils",
+        ":layer_by_layer_schema_py",
+        ":model_transforms_utils",
+        requirement("ai-edge-litert"),
+        "//python/tflite_micro:runtime",
+    ],
+)
+
+flatbuffer_cc_library(
+    name = "layer_by_layer_schema",
+    srcs = ["layer_by_layer_schema.fbs"],
+)
+
+flatbuffer_py_library(
+    name = "layer_by_layer_schema_py",
+    srcs = ["layer_by_layer_schema.fbs"],
+)
+
+tflm_py_binary(
+    name = "refresh_compile_commands",
+    srcs = ["ci_build/generate_compile_commands.py"],
+    main = "ci_build/generate_compile_commands.py",
+    visibility = ["//visibility:public"],
+)

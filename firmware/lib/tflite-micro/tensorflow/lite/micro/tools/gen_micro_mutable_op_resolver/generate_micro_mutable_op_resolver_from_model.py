@@ -1,0 +1,233 @@
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""This tool generates a header with Micro Mutable Op Resolver code for a given
+model. See README.md for more info.
+"""
+
+import argparse
+import os
+import re
+
+from tflite_micro.tensorflow.lite.micro.tools import visualize
+
+HEADER_TEMPLATE = """\
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+// Generated based on {model}.
+
+#pragma once
+
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+
+constexpr int kNumberOperators = {number_of_ops};
+
+inline tflite::MicroMutableOpResolver<kNumberOperators> get_resolver() {{
+  tflite::MicroMutableOpResolver<kNumberOperators> micro_op_resolver;
+
+{operators}
+
+  return micro_op_resolver;
+}}
+"""
+
+
+def ParseString(word):
+  """Converts a flatbuffer operator string to a format suitable for Micro
+  Mutable Op Resolver. Example: CONV_2D --> AddConv2D."""
+
+  # Edge case for AddDetectionPostprocess().
+  # The custom code is TFLite_Detection_PostProcess.
+  word = word.replace('TFLite', '')
+
+  word_split = re.split('_|-', word)
+  formated_op_string = ''
+  for part in word_split:
+    if len(part) > 1:
+      if part[0].isalpha():
+        formated_op_string += part[0].upper() + part[1:].lower()
+      else:
+        formated_op_string += part.upper()
+    else:
+      formated_op_string += part.upper()
+
+  # Edge cases
+  formated_op_string = formated_op_string.replace('Lstm', 'LSTM')
+  formated_op_string = formated_op_string.replace('BatchMatmul', 'BatchMatMul')
+
+  return 'Add' + formated_op_string
+
+
+def GenerateMicroMutableOpsResolverHeaderFile(
+  operators, name_of_model, output_dir
+):
+  """Generates Micro Mutable Op Resolver header file."""
+
+  outfile = os.path.join(output_dir, 'gen_micro_mutable_op_resolver.h')
+  with open(outfile, 'w') as file_obj:
+    file_obj.write(
+      HEADER_TEMPLATE.format(
+        model=name_of_model,
+        number_of_ops=len(operators),
+        operators='\n'.join(f'  micro_op_resolver.{op}();' for op in operators),
+      )
+    )
+
+
+def GetModelOperatorsAndActivation(model_path):
+  """Extracts a set of operators from a tflite model."""
+
+  custom_op_found = False
+  operators_and_activations = set()
+
+  with open(model_path, 'rb') as f:
+    data_bytes = bytearray(f.read())
+
+  data = visualize.CreateDictFromFlatbuffer(data_bytes)
+
+  for op_code in data["operator_codes"]:
+    if op_code['custom_code'] is None:
+      op_code["builtin_code"] = max(
+        op_code["builtin_code"], op_code["deprecated_builtin_code"]
+      )
+    else:
+      custom_op_found = True
+      operators_and_activations.add(
+        visualize.NameListToString(op_code['custom_code'])
+      )
+
+  for op_code in data["operator_codes"]:
+    # Custom operator already added.
+    if (
+      custom_op_found
+      and visualize.BuiltinCodeToName(op_code['builtin_code']) == "CUSTOM"
+    ):
+      continue
+
+    operators_and_activations.add(
+      visualize.BuiltinCodeToName(op_code['builtin_code'])
+    )
+
+  return operators_and_activations
+
+
+def VerifyOpList(op_list, header):
+  """Make sure operators in list are not missing in header file ."""
+
+  supported_op_list = []
+  with open(header, 'r') as f:
+    for line in f:
+      if "TfLiteStatus Add" in line:
+        op = line.strip().split(' ')[1].split('(')[0]
+        supported_op_list.append(op)
+
+  for op in op_list:
+    if op not in supported_op_list:
+      print(f'{op} not supported by TFLM')
+      return True
+
+  return False
+
+
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+    '--common_tflite_path',
+    required=True,
+    help=(
+      'Common path to tflite files. This need to be an absolute path.'
+      'This would typically be the path to the directory where the models'
+      ' reside.'
+    ),
+  )
+  parser.add_argument(
+    '--input_tflite_files',
+    required=True,
+    help=(
+      'Relative path name list of the input TFLite files.'
+      'This would be relative to the common path.'
+      'This would typically be the name(s) of the tflite file(s).'
+    ),
+  )
+  parser.add_argument(
+    '--output_dir',
+    required=True,
+    help='Directory to output generated files.',
+  )
+  parser.add_argument(
+    '--verify_op_list_against_header',
+    default=None,
+    help=(
+      'Take micro_mutable_op_resolver.h as input and verifies that all'
+      ' generated operator calls are there.'
+    ),
+  )
+  args, _ = parser.parse_known_args()
+
+  model_names = []
+  final_operator_list = []
+  merged_operator_list = []
+
+  common_model_path = args.common_tflite_path
+  relative_model_paths = [x for x in args.input_tflite_files.split(',') if x]
+
+  for relative_model_path in relative_model_paths:
+    full_model_path = f"{common_model_path}/{relative_model_path}"
+    operators = GetModelOperatorsAndActivation(full_model_path)
+    model_name = full_model_path.split('/')[-1]
+    model_names.append(model_name)
+
+    parsed_operator_list = []
+    for op in sorted(list(operators)):
+      parsed_operator_list.append(ParseString(op))
+
+    merged_operator_list = merged_operator_list + parsed_operator_list
+
+  number_models = len(model_names)
+  if number_models > 1:
+    model_name = ", ".join(model_names)
+
+  [
+    final_operator_list.append(operator)
+    for operator in merged_operator_list
+    if operator not in final_operator_list
+  ]
+
+  if args.verify_op_list_against_header and VerifyOpList(
+    final_operator_list, args.verify_op_list_against_header
+  ):
+    return True
+
+  os.makedirs(args.output_dir, exist_ok=True)
+  GenerateMicroMutableOpsResolverHeaderFile(
+    final_operator_list, model_name, args.output_dir
+  )
+  return False
+
+
+if __name__ == '__main__':
+  main()

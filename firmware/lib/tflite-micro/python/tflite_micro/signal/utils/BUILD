@@ -1,0 +1,81 @@
+load("//python:py_rules.bzl", "pybind_extension", "tflm_py_library", "tflm_py_test")
+load("//tensorflow/lite/micro:build_def.bzl", "INCOMPATIBLE_WITH_WINDOWS")
+
+package(
+    default_visibility = [
+        "//python/tflite_micro/signal:__subpackages__",
+    ],
+    licenses = ["notice"],
+)
+
+tflm_py_test(
+    name = "freq_to_mel_test",
+    srcs = ["freq_to_mel_test.py"],
+    data = [
+        ":freq_to_mel_wrapper.so",
+    ],
+    tags = [
+        "noasan",
+        "nomsan",
+        "noubsan",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+)
+
+tflm_py_library(
+    name = "freq_to_mel",
+    data = [
+        ":freq_to_mel_wrapper.so",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+)
+
+pybind_extension(
+    name = "freq_to_mel_wrapper",  # :freq_to_mel_wrapper.so
+    srcs = [
+        "freq_to_mel_wrapper.cc",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+)
+
+tflm_py_library(
+    name = "util",
+    srcs = ["util.py"],
+    tags = ["manual"],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    visibility = ["//visibility:public"],
+    deps = [
+        "//python/tflite_micro:runtime",
+    ],
+)
+
+pybind_extension(
+    name = "wide_dynamic_func_lut_wrapper",  # :wide_dynamic_func_lut_wrapper.so
+    srcs = [
+        "wide_dynamic_func_lut_wrapper.cc",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+)
+
+tflm_py_library(
+    name = "wide_dynamic_func_lut",
+    data = [
+        ":wide_dynamic_func_lut_wrapper.so",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+)
+
+tflm_py_test(
+    name = "wide_dynamic_func_lut_test",
+    srcs = ["wide_dynamic_func_lut_test.py"],
+    data = [
+        ":wide_dynamic_func_lut_wrapper.so",
+    ],
+    tags = [
+        "noasan",
+        "nomsan",
+        "noubsan",
+    ],
+    target_compatible_with = INCOMPATIBLE_WITH_WINDOWS,
+    visibility = ["//visibility:public"],
+)

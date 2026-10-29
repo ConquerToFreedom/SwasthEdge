@@ -1,0 +1,134 @@
+load("//python:py_rules.bzl", "tflm_py_binary", "tflm_py_library")
+load(
+    "//tensorflow/lite/micro:build_def.bzl",
+    "tflm_cc_library",
+    "tflm_cc_test",
+)
+load(
+    "//tensorflow/lite/micro:extra_rules.bzl",
+    "tflm_kernel_friends",
+)
+
+package(
+    licenses = ["notice"],
+)
+
+package_group(
+    name = "tflite_micro",
+    packages = ["//..."],
+)
+
+package_group(
+    name = "kernel_test_friends",
+    packages = tflm_kernel_friends(),
+)
+
+tflm_cc_library(
+    name = "micro_test",
+    hdrs = [
+        "micro_test.h",
+        "micro_test_v2.h",
+    ],
+    visibility = [
+        ":kernel_test_friends",
+        ":tflite_micro",
+    ],
+    deps = [
+        "//tensorflow/lite/micro:debug_log",
+        "//tensorflow/lite/micro:micro_common",
+        "//tensorflow/lite/micro:micro_framework",
+        "//tensorflow/lite/micro:micro_log",
+        "//tensorflow/lite/micro:micro_utils",
+        "//tensorflow/lite/micro:system_setup",
+        "//tensorflow/lite/micro:test_helpers",
+    ],
+)
+
+tflm_cc_library(
+    name = "test_all_op_resolver",
+    hdrs = [
+        "test_all_op_resolver.h",
+    ],
+    visibility = [
+        ":kernel_test_friends",
+        ":tflite_micro",
+    ],
+    deps = [
+        "//tensorflow/lite/micro:micro_common",
+        "//tensorflow/lite/micro:micro_compatibility",
+        "//tensorflow/lite/micro:op_resolvers",
+    ],
+)
+
+tflm_cc_test(
+    name = "test_all_op_resolver_test",
+    srcs = [
+        "test_all_op_resolver_test.cc",
+    ],
+    visibility = [
+        ":tflite_micro",
+    ],
+    deps = [
+        ":micro_test",
+        ":test_all_op_resolver",
+    ],
+)
+
+tflm_cc_test(
+    name = "util_test",
+    srcs = [
+        "util_test.cc",
+    ],
+    visibility = [
+        ":tflite_micro",
+    ],
+    deps = [
+        ":micro_test",
+    ],
+)
+
+tflm_cc_test(
+    name = "util_v2_test",
+    srcs = [
+        "util_v2_test.cc",
+    ],
+    visibility = [
+        ":tflite_micro",
+    ],
+    deps = [
+        ":micro_test",
+    ],
+)
+
+tflm_cc_library(
+    name = "test_conv_model",
+    srcs = [
+        "test_conv_model.cc",
+    ],
+    hdrs = [
+        "test_conv_model.h",
+    ],
+    visibility = [
+        ":tflite_micro",
+    ],
+)
+
+tflm_py_library(
+    name = "generate_test_models_lib",
+    srcs = ["generate_test_models.py"],
+    data = ["conv_test_model.tflite"],
+    visibility = [
+        ":tflite_micro",
+    ],
+    deps = [],
+)
+
+tflm_py_binary(
+    name = "generate_test_models",
+    srcs = ["generate_test_models.py"],
+    data = ["conv_test_model.tflite"],
+    tags = [
+        "noubsan",  # TODO(b/144512025): Fix raw_to_bitmap_test to fix ubsan failure.
+    ],
+    deps = [],
+)

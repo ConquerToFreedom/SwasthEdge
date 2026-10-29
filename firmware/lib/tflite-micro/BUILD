@@ -1,0 +1,39 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@rules_python//python:defs.bzl", "py_library")
+
+# `bazel run` this target to generate compile_commands.json, which can be used
+# by various tools like editors and LSPs to provide features like intelligent
+# navigation and autocompletion based on the source graph and compiler commands.
+alias(
+    name = "refresh_compile_commands",
+    actual = "//tensorflow/lite/micro/tools:refresh_compile_commands",
+)
+
+bool_flag(
+    name = "with_compression",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "with_compression_enabled",
+    flag_values = {
+        ":with_compression": "True",
+    },
+    visibility = ["//visibility:public"],
+)
+
+licenses(["notice"])
+
+exports_files(["LICENSE"])
+
+# Synthesizes the "tflite_micro" top-level package namespace at import time, so
+# that `from tflite_micro...` imports resolve (see tflite_micro.py). Necessary
+# because Bzlmod fixes the main repo's runfiles root to "_main" rather than the
+# module name. Targets should generally not depend on this directly: use the
+# tflm_py_* wrappers in //python:py_rules.bzl, which add it automatically.
+py_library(
+    name = "tflite_micro_shim",
+    srcs = ["tflite_micro.py"],
+    visibility = ["//visibility:public"],
+)

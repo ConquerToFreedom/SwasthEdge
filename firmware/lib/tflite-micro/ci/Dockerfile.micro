@@ -1,0 +1,87 @@
+# TFLM CI Docker Container
+#
+# This container includes all dependencies for TFLM CI checks and is
+# recommended for local debugging to ensure a consistent environment.
+#
+# === Usage ===
+#
+# --- Pull a prebuilt image ---
+# See all versions: https://github.com/users/TFLM-bot/packages/container/tflm-ci/versions
+#   docker pull ghcr.io/tflm-bot/tflm-ci:<version>
+#
+# --- Build locally ---
+# (Run from the root of the TFLM repository)
+#   docker build -f ci/Dockerfile.micro -t tflm-ci .
+#
+# --- Build and upload to GHCR.IO ---
+# (Run from the root of the TFLM repository)
+#   export TFLM_CI_VERSION=0.7.0
+#   docker build --no-cache -f ci/Dockerfile.micro -t ghcr.io/tflm-bot/tflm-ci:$TFLM_CI_VERSION .
+#   docker push ghcr.io/tflm-bot/tflm-ci:$TFLM_CI_VERSION
+#
+# --- Run locally for debugging ---
+# (Mounts local repo and opens a shell)
+# (Run from the root of the TFLM repository)
+#   docker run -it --rm -v $(pwd):/opt/tflm -w /opt/tflm tflm-ci /bin/bash
+#
+
+# Use a prebuilt Python image to speed up the build process.
+FROM python:3.11-bookworm
+
+# Install all required system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    gnupg \
+    lsb-release \
+    software-properties-common \
+    sudo \
+    wget \
+    xxd \
+    zip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install LLVM/Clang and create symlinks
+RUN apt-get update && apt-get install -y \
+    clang-22 \
+    clang++-22 \
+    clang-format-22 \
+    clang-tidy-22 \
+    && ln -s /usr/bin/clang-22 /usr/bin/clang \
+    && ln -s /usr/bin/clang++-22 /usr/bin/clang++ \
+    && ln -s /usr/bin/clang-format-22 /usr/bin/clang-format \
+    && ln -s /usr/bin/clang-tidy-22 /usr/bin/clang-tidy \
+    && ln -s /usr/bin/clang-tidy-diff-22.py /usr/bin/clang-tidy-diff.py \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install all Python dependencies
+# - ruff and yapf to check for Python formatting
+# - pyrefly for Python type checking
+# - Pillow was added first for the C array generation
+# - pandas, and matplotlib for create_size_log scripts
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    matplotlib \
+    numpy \
+    pandas \
+    Pillow \
+    psutil \
+    pyrefly==1.3.1 \
+    pyyaml \
+    requests \
+    ruff==0.16.8 \
+    yapf==0.40.2
+
+# Copy and run install scripts, then clean them up
+ENV BAZELISK_HOME="/opt/bazelisk"
+WORKDIR /
+COPY .bazelversion ci/install_bazelisk.sh ci/install_buildifier.sh /install/
+RUN chmod +x /install/*.sh && \
+    /install/install_bazelisk.sh && \
+    /install/install_buildifier.sh && \
+    rm -rf /install
+
+# Configure git safe directories
+RUN git config --system --add safe.directory '*'

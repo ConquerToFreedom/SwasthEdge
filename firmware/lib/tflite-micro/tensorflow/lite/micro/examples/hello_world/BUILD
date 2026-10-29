@@ -1,0 +1,70 @@
+load("@tflm_pip_deps//:requirements.bzl", "requirement")
+load("//python:py_rules.bzl", "tflm_py_binary", "tflm_py_test")
+load(
+    "//tensorflow/lite/micro:build_def.bzl",
+    "tflm_cc_library",
+    "tflm_cc_test",
+)
+
+package(
+    licenses = ["notice"],
+)
+
+tflm_cc_library(
+    name = "model",
+    srcs = [
+        "//tensorflow/lite/micro/examples/hello_world/models:generated_hello_world_float_model_cc",
+        "//tensorflow/lite/micro/examples/hello_world/models:generated_hello_world_int8_model_cc",
+    ],
+    hdrs = [
+        "//tensorflow/lite/micro/examples/hello_world/models:generated_hello_world_float_model_hdr",
+        "//tensorflow/lite/micro/examples/hello_world/models:generated_hello_world_int8_model_hdr",
+    ],
+)
+
+tflm_cc_test(
+    name = "hello_world_test",
+    srcs = [
+        "hello_world_test.cc",
+    ],
+    visibility = ["//tensorflow/lite/micro:__subpackages__"],
+    deps = [
+        ":model",
+        "//tensorflow/lite/micro:micro_common",
+        "//tensorflow/lite/micro:micro_framework",
+        "//tensorflow/lite/micro:micro_log",
+        "//tensorflow/lite/micro:micro_profiler",
+        "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro:recording_allocators",
+        "//tensorflow/lite/micro:system_setup",
+        "//tensorflow/lite/micro/testing:micro_test",
+    ],
+)
+
+tflm_py_binary(
+    name = "evaluate",
+    srcs = ["evaluate.py"],
+    data = ["//tensorflow/lite/micro/examples/hello_world/models:hello_world_float.tflite"],
+    deps = [
+        requirement("numpy"),
+        requirement("ai-edge-litert"),
+        "//python/tflite_micro:runtime",
+    ],
+)
+
+tflm_py_test(
+    name = "evaluate_test",
+    srcs = ["evaluate_test.py"],
+    data = [
+        "//tensorflow/lite/micro/examples/hello_world/models:hello_world_float.tflite",
+        "//tensorflow/lite/micro/examples/hello_world/models:hello_world_int8.tflite",
+    ],
+    tags = [
+        "noasan",
+        "nomsan",
+        "noubsan",
+    ],
+    deps = [
+        ":evaluate",
+    ],
+)

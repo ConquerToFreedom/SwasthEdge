@@ -1,0 +1,741 @@
+# Copyright 2024 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Integration tests for the compression system."""
+
+import warnings
+
+import numpy as np
+import unittest
+
+from tflite_micro.tensorflow.lite.micro.compression import compress
+from tflite_micro.tensorflow.lite.micro.compression import compressor
+from tflite_micro.tensorflow.lite.micro.compression import decode_insert
+from tflite_micro.tensorflow.lite.micro.compression import model_editor
+from tflite_micro.tensorflow.lite.micro.compression import spec
+from tflite_micro.tensorflow.lite.micro.python import (
+  schema_py_generated as tflite,
+)
+
+
+def _build_test_model():
+  """Build test model using model_editor API."""
+  from tflite_micro.tensorflow.lite.micro.compression.model_editor import (
+    Model,
+    Subgraph,
+    Tensor,
+    Operator,
+    Quantization,
+  )
+
+  # Pre-declare tensors with stable indices for compression specs
+  t0 = Tensor(
+    shape=(16, 1),
+    dtype=tflite.TensorType.UINT8,
+    data=np.array(range(16), dtype="<u1"),
+    name="tensor0",
+    quantization=Quantization(scales=1, zero_points=0),
+  )
+  t1 = Tensor(
+    shape=(16, 1),
+    dtype=tflite.TensorType.INT8,
+    data=np.array(range(-16, 0), dtype="<i1"),
+    name="tensor1",
+    quantization=Quantization(scales=1, zero_points=0),
+  )
+  t2 = Tensor(
+    shape=(16, 1),
+    dtype=tflite.TensorType.INT16,
+    data=np.array(range(-1616, -1600), dtype="<i2"),
+    name="tensor2",
+    quantization=Quantization(scales=1, zero_points=0),
+  )
+  t3 = Tensor(
+    shape=(16, 1),
+    dtype=tflite.TensorType.INT32,
+    data=np.array(range(-160_016, -160_000), dtype="<i4"),
+    name="tensor3",
+    quantization=Quantization(scales=1, zero_points=0),
+  )
+  t4 = Tensor(
+    shape=(16, 1),
+    dtype=tflite.TensorType.INT32,
+    data=np.array(range(16), dtype="<i4"),
+    name="tensor4_uncompressed",
+    quantization=Quantization(scales=1, zero_points=0),
+  )
+  # yapf: disable
+  t5 = Tensor(
+      shape=(4, 5),
+      dtype=tflite.TensorType.INT16,
+      data=np.array((( 1,  5,  9, 13, 17),
+                     ( 2,  6, 10, 14, 18),
+                     ( 3,  7, 11, 15, 19),
+                     ( 4,  8, 12, 16, 20)), dtype="<i2"),
+      name="tensor5_perchannel",
+      quantization=Quantization(
+          scales=[1, 1, 1, 1, 1], zero_points=[0, 0, 0, 0, 0], axis=1))
+  t6 = Tensor(
+      shape=(5, 4),
+      dtype=tflite.TensorType.INT16,
+      data=np.array((( 1,  2,  3,  4),
+                     ( 5,  6,  7,  8),
+                     ( 9, 10, 11, 12),
+                     (13, 14, 15, 16),
+                     (17, 18, 19, 20)), dtype="<i2"),
+      name="tensor6_axis0",
+      quantization=Quantization(
+          scales=[1, 1, 1, 1, 1], zero_points=[0, 0, 0, 0, 0], axis=0))
+  t7 = Tensor(
+      shape=(5, 4),
+      dtype=tflite.TensorType.INT16,
+      data=np.array(((1, 2, 3, 4),
+                     (1, 2, 3, 4),
+                     (1, 2, 3, 4),
+                     (1, 2, 3, 4),
+                     (1, 2, 3, 4)), dtype="<i2"),
+      name="tensor7_pertensor",
+      quantization=Quantization(scales=1, zero_points=0))
+  # yapf: enable
+  t8 = Tensor(
+    shape=(16, 1),
+    dtype=tflite.TensorType.UINT8,
+    data=np.array(range(16), dtype="<u1"),
+    name="tensor8_no_quantization",
+  )
+
+  # Output tensors (no data)
+  out0 = Tensor(shape=(16, 1), dtype=tflite.TensorType.INT16, name="output0")
+  out1 = Tensor(shape=(16, 1), dtype=tflite.TensorType.INT16, name="output1")
+
+  model = Model(
+    metadata={"metadata0": b""},
+    subgraphs=[
+      Subgraph(
+        tensors=[t0, t1, t2, t3, t4, t5, t6, t7, t8],
+        operators=[
+          Operator(
+            opcode=tflite.BuiltinOperator.ADD, inputs=[t0, t1], outputs=[out0]
+          ),
+          Operator(
+            opcode=tflite.BuiltinOperator.MUL, inputs=[t2, t3], outputs=[out1]
+          ),
+        ],
+      )
+    ],
+  )
+
+  return model.build()
+
+
+TEST_COMPRESSION_SPEC = [
+  spec.Tensor(  # spec 0
+    subgraph=0,
+    tensor=0,
+    compression=[
+      spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+    ],
+  ),
+  spec.Tensor(  # spec 1
+    subgraph=0,
+    tensor=1,
+    compression=[
+      spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+    ],
+  ),
+  spec.Tensor(  # spec 2
+    subgraph=0,
+    tensor=2,
+    compression=[
+      spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+    ],
+  ),
+  spec.Tensor(  # spec 3
+    subgraph=0,
+    tensor=3,
+    compression=[
+      spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+    ],
+  ),
+  # Tensor 4 intentionally left uncompressed
+  spec.Tensor(  # spec 4
+    subgraph=0,
+    tensor=5,
+    compression=[
+      spec.LookUpTableCompression(
+        index_bitwidth=2, mode=spec.PerChannel(axis=1)
+      )
+    ],
+  ),
+  spec.Tensor(  # spec 5
+    subgraph=0,
+    tensor=6,
+    compression=[
+      spec.LookUpTableCompression(
+        index_bitwidth=2, mode=spec.PerChannel(axis=0)
+      )
+    ],
+  ),
+  spec.Tensor(  # spec 6
+    subgraph=0,
+    tensor=7,
+    compression=[
+      spec.LookUpTableCompression(index_bitwidth=2, mode=spec.PerTensor())
+    ],
+  ),
+]
+
+
+class TestCompression(unittest.TestCase):
+  """Integration tests for the compress() function."""
+
+  @classmethod
+  def setUpClass(cls):
+    super().setUpClass()
+    cls.flatbuffer = _build_test_model()
+    cls.uncompressed = model_editor.read(cls.flatbuffer)
+
+  def test_compression_produces_valid_flatbuffer(self):
+    """Compressed model is a valid flatbuffer that can be read back."""
+    compressed_fb = compress.compress(self.flatbuffer, TEST_COMPRESSION_SPEC)
+    model = model_editor.read(compressed_fb)
+    self.assertIsNotNone(model)
+    self.assertEqual(len(model.subgraphs), 1)
+
+  def test_decode_operators_inserted(self):
+    """DECODE operators are inserted for compressed tensors."""
+    compressed_fb = compress.compress(self.flatbuffer, TEST_COMPRESSION_SPEC)
+    model = model_editor.read(compressed_fb)
+    sg = model.subgraphs[0]
+
+    # Find DECODE operators
+    decode_ops = [
+      op
+      for op in sg.operators
+      if op.opcode == tflite.BuiltinOperator.CUSTOM
+      and op.custom_code == decode_insert.DECODE_CUSTOM_OP_NAME
+    ]
+
+    # Should have DECODE ops for compressed tensors that are used as inputs
+    # t0, t1 used by ADD; t2, t3 used by MUL
+    # t5, t6, t7 are not used as inputs in the test model
+    self.assertGreater(len(decode_ops), 0)
+
+  def test_decode_operator_structure(self):
+    """DECODE operators have correct input/output structure."""
+    # Build a simple model where weights are used as input
+    # yapf: disable
+    weights = model_editor.Tensor(
+        shape=(4, 4),
+        dtype=tflite.TensorType.INT8,
+        data=np.array([[1, 2, 1, 2],
+                       [3, 4, 3, 4],
+                       [1, 2, 1, 2],
+                       [3, 4, 3, 4]], dtype=np.int8),
+        name="weights",
+        quantization=model_editor.Quantization(scales=0.5, zero_points=0),
+    )
+    # yapf: enable
+    input_t = model_editor.Tensor(
+      shape=(1, 4),
+      dtype=tflite.TensorType.INT8,
+      name="input",
+    )
+    output_t = model_editor.Tensor(
+      shape=(1, 4),
+      dtype=tflite.TensorType.INT8,
+      name="output",
+    )
+
+    model = model_editor.Model(
+      subgraphs=[
+        model_editor.Subgraph(
+          tensors=[weights],
+          operators=[
+            model_editor.Operator(
+              opcode=tflite.BuiltinOperator.FULLY_CONNECTED,
+              inputs=[input_t, weights],
+              outputs=[output_t],
+            )
+          ],
+        )
+      ]
+    )
+    fb = model.build()
+
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+        ],
+      )
+    ]
+
+    compressed_fb = compress.compress(fb, specs)
+    result = model_editor.read(compressed_fb)
+    sg = result.subgraphs[0]
+
+    # Find DECODE operator
+    decode_ops = [
+      op
+      for op in sg.operators
+      if op.opcode == tflite.BuiltinOperator.CUSTOM
+      and op.custom_code == decode_insert.DECODE_CUSTOM_OP_NAME
+    ]
+    self.assertEqual(len(decode_ops), 1)
+    decode_op = decode_ops[0]
+
+    # DECODE has 2 inputs: encoded tensor and ancillary data
+    self.assertEqual(len(decode_op.inputs), 2)
+    # DECODE has 1 output
+    self.assertEqual(len(decode_op.outputs), 1)
+    # Output has same shape as original weights
+    self.assertEqual(decode_op.outputs[0].shape, (4, 4))
+
+  def test_ancillary_data_format(self):
+    """Ancillary data has correct DCM header format."""
+    # yapf: disable
+    weights = model_editor.Tensor(
+        shape=(4, 4),
+        dtype=tflite.TensorType.INT8,
+        data=np.array([[1, 2, 1, 2],
+                       [3, 4, 3, 4],
+                       [1, 2, 1, 2],
+                       [3, 4, 3, 4]], dtype=np.int8),
+        name="weights",
+        quantization=model_editor.Quantization(scales=0.5, zero_points=0),
+    )
+    # yapf: enable
+    input_t = model_editor.Tensor(
+      shape=(1, 4), dtype=tflite.TensorType.INT8, name="input"
+    )
+    output_t = model_editor.Tensor(
+      shape=(1, 4), dtype=tflite.TensorType.INT8, name="output"
+    )
+
+    model = model_editor.Model(
+      subgraphs=[
+        model_editor.Subgraph(
+          tensors=[weights],
+          operators=[
+            model_editor.Operator(
+              opcode=tflite.BuiltinOperator.FULLY_CONNECTED,
+              inputs=[input_t, weights],
+              outputs=[output_t],
+            )
+          ],
+        )
+      ]
+    )
+    fb = model.build()
+
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+        ],
+      )
+    ]
+
+    compressed_fb = compress.compress(fb, specs)
+    result = model_editor.read(compressed_fb)
+
+    # Find DECODE and get ancillary tensor
+    decode_op = next(
+      op
+      for op in result.subgraphs[0].operators
+      if op.custom_code == decode_insert.DECODE_CUSTOM_OP_NAME
+    )
+    ancillary = decode_op.inputs[1]
+
+    # Verify DCM header
+    dcm_bytes = bytes(ancillary.array[:16])
+    self.assertEqual(dcm_bytes[0], 0)  # decode_type = LUT
+    self.assertEqual(dcm_bytes[1], 1)  # DCM version
+    self.assertEqual(dcm_bytes[4], 1)  # LUT version
+    self.assertEqual(dcm_bytes[5] & 0x07, 4)  # bitwidth = 4
+    self.assertEqual(dcm_bytes[6], 4)  # stride = num unique values
+
+  def test_empty_spec_raises(self):
+    """Empty compression spec is an error, not a silent no-op."""
+    self.assertRaisesRegex(
+      compressor.CompressionError,
+      "empty",
+      lambda: compress.compress(self.flatbuffer, []),
+    )
+
+  def test_smaller_bitwidth_raises(self):
+    """Specifying LUT compression with too small a bitwidth fails."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=1,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=3, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    self.assertRaises(
+      compressor.CompressionError,
+      lambda: compress.compress(self.flatbuffer, specs),
+    )
+
+  def test_larger_bitwidth_succeeds(self):
+    """Specifying LUT compression with too large a bitwidth succeeds."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=1,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=5, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    # Should not raise
+    _ = compress.compress(self.flatbuffer, specs)
+
+  def test_invalid_tensor_spec_raises(self):
+    """Specifying a tensor that doesn't exist raises CompressionError."""
+    specs = [
+      spec.Tensor(
+        subgraph=666,
+        tensor=1,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    self.assertRaises(
+      compressor.CompressionError,
+      lambda: compress.compress(self.flatbuffer, specs),
+    )
+
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=666,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    self.assertRaises(
+      compressor.CompressionError,
+      lambda: compress.compress(self.flatbuffer, specs),
+    )
+
+  def test_no_quantization_uses_per_tensor(self):
+    """An unquantized tensor compresses in per-tensor mode."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=8,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    _ = compress.compress(self.flatbuffer, specs)
+
+  def test_huffman_compression_not_implemented(self):
+    """Huffman compression raises not implemented error."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[spec.HuffmanCompression()],
+      ),
+    ]
+    self.assertRaises(
+      compressor.CompressionError,
+      lambda: compress.compress(self.flatbuffer, specs),
+    )
+
+  def test_pruning_compression_not_implemented(self):
+    """Pruning compression raises not implemented error."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[spec.PruningCompression()],
+      ),
+    ]
+    self.assertRaises(
+      compressor.CompressionError,
+      lambda: compress.compress(self.flatbuffer, specs),
+    )
+
+  def test_compression_expansion_warning(self):
+    """Warning emitted when compression results in expansion."""
+    # Build a tiny model where compression overhead exceeds savings
+    tiny_weights = model_editor.Tensor(
+      shape=(2,),
+      dtype=tflite.TensorType.INT8,
+      data=np.array([1, 2], dtype=np.int8),  # 2 bytes original
+      name="tiny",
+      quantization=model_editor.Quantization(scales=0.5, zero_points=0),
+    )
+    input_t = model_editor.Tensor(
+      shape=(1,), dtype=tflite.TensorType.INT8, name="input"
+    )
+    output_t = model_editor.Tensor(
+      shape=(1,), dtype=tflite.TensorType.INT8, name="output"
+    )
+    model = model_editor.Model(
+      subgraphs=[
+        model_editor.Subgraph(
+          tensors=[tiny_weights],
+          operators=[
+            model_editor.Operator(
+              opcode=tflite.BuiltinOperator.FULLY_CONNECTED,
+              inputs=[input_t, tiny_weights],
+              outputs=[output_t],
+            )
+          ],
+        )
+      ]
+    )
+    fb = model.build()
+
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=4, mode=spec.PerTensor())
+        ],
+      )
+    ]
+
+    with warnings.catch_warnings(record=True) as w:
+      warnings.simplefilter("always")
+      compress.compress(fb, specs)
+
+      expansion_warnings = [x for x in w if "expansion" in str(x.message)]
+      self.assertEqual(len(expansion_warnings), 1)
+      self.assertIn("tiny", str(expansion_warnings[0].message))
+
+
+class TestSharedBufferCompression(unittest.TestCase):
+  """Tests through compress() for constants sharing one buffer.
+
+  The converter deduplicates identical constants into one buffer, so a
+  spec may name several tensors aliasing the same data, possibly under
+  different shapes.
+  """
+
+  def _build(self) -> bytes:
+    shared = model_editor.Buffer(
+      data=np.array([1, 2, 1, 2], dtype=np.int8).tobytes()
+    )
+    first = model_editor.Tensor(
+      shape=(4,), dtype=tflite.TensorType.INT8, buffer=shared, name="first"
+    )
+    second = model_editor.Tensor(
+      shape=(1, 4), dtype=tflite.TensorType.INT8, buffer=shared, name="second"
+    )
+    act = model_editor.Tensor(
+      shape=(4,), dtype=tflite.TensorType.INT8, name="act"
+    )
+    out0 = model_editor.Tensor(
+      shape=(4,), dtype=tflite.TensorType.INT8, name="out0"
+    )
+    out1 = model_editor.Tensor(
+      shape=(1, 4), dtype=tflite.TensorType.INT8, name="out1"
+    )
+    model = model_editor.Model(
+      subgraphs=[
+        model_editor.Subgraph(
+          tensors=[first, second],
+          operators=[
+            model_editor.Operator(
+              opcode=tflite.BuiltinOperator.ADD,
+              inputs=[act, first],
+              outputs=[out0],
+            ),
+            model_editor.Operator(
+              opcode=tflite.BuiltinOperator.ADD,
+              inputs=[act, second],
+              outputs=[out1],
+            ),
+          ],
+        )
+      ]
+    )
+    return bytes(model.build())
+
+  def _decode_ops(self, model):
+    return [
+      op
+      for sg in model.subgraphs
+      for op in sg.operators
+      if op.opcode == tflite.BuiltinOperator.CUSTOM
+      and op.custom_code == decode_insert.DECODE_CUSTOM_OP_NAME
+    ]
+
+  def test_all_aliases_compressed(self):
+    """Compressing every alias of a buffer reads each tensor's original
+    data and decodes each alias to its own shape."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=1, mode=spec.PerTensor())
+        ],
+      ),
+      spec.Tensor(
+        subgraph=0,
+        tensor=1,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=1, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    compressed_fb = compress.compress(self._build(), specs)
+    model = model_editor.read(compressed_fb)
+    decode_ops = self._decode_ops(model)
+    self.assertEqual(len(decode_ops), 2)
+    shapes = sorted(tuple(op.outputs[0].shape) for op in decode_ops)
+    self.assertEqual(shapes, [(1, 4), (4,)])
+
+  def test_partial_coverage_keeps_original_data(self):
+    """Compressing one alias of a shared buffer warns, inserts no
+    DECODE, and leaves the original data in the model."""
+    specs = [
+      spec.Tensor(
+        subgraph=0,
+        tensor=0,
+        compression=[
+          spec.LookUpTableCompression(index_bitwidth=1, mode=spec.PerTensor())
+        ],
+      ),
+    ]
+    with warnings.catch_warnings(record=True) as caught:
+      warnings.simplefilter("always")
+      compressed_fb = compress.compress(self._build(), specs)
+    self.assertTrue(any("sharing a buffer" in str(x.message) for x in caught))
+
+    model = model_editor.read(compressed_fb)
+    self.assertEqual(len(self._decode_ops(model)), 0)
+    original = np.array([1, 2, 1, 2], dtype=np.int8).tobytes()
+    sg = model.subgraphs[0]
+    self.assertEqual(bytes(sg.tensors[0].buffer.data), original)
+    self.assertEqual(bytes(sg.tensors[1].buffer.data), original)
+
+
+class TestPluginDispatch(unittest.TestCase):
+  """Tests for the plugin dispatch system."""
+
+  def test_get_compressor_lut(self):
+    """LUT compression method dispatches to LutCompressor."""
+    method = spec.LookUpTableCompression(
+      index_bitwidth=4, mode=spec.PerTensor()
+    )
+    compressor_instance = compress._get_compressor(method)
+    from tflite_micro.tensorflow.lite.micro.compression import lut
+
+    self.assertIsInstance(compressor_instance, lut.LutCompressor)
+
+  def test_get_compressor_huffman(self):
+    """Huffman compression method dispatches to HuffmanCompressor."""
+    method = spec.HuffmanCompression()
+    compressor_instance = compress._get_compressor(method)
+    from tflite_micro.tensorflow.lite.micro.compression import huffman
+
+    self.assertIsInstance(compressor_instance, huffman.HuffmanCompressor)
+
+  def test_get_compressor_pruning(self):
+    """Pruning compression method dispatches to PruningCompressor."""
+    method = spec.PruningCompression()
+    compressor_instance = compress._get_compressor(method)
+    from tflite_micro.tensorflow.lite.micro.compression import pruning
+
+    self.assertIsInstance(compressor_instance, pruning.PruningCompressor)
+
+  def test_get_compressor_unknown_raises(self):
+    """Unknown compression method raises CompressionError."""
+
+    class UnknownCompression(spec.CompressionMethod):
+      pass
+
+    method = UnknownCompression()
+    self.assertRaises(
+      compressor.CompressionError, lambda: compress._get_compressor(method)
+    )
+
+
+class TestConstantInputs(unittest.TestCase):
+  """compress() refuses a tensor its consumer must read in Prepare."""
+
+  def _build(self, opcode) -> bytes:
+    """Build one operator reading a compressible constant at input 1."""
+    const = model_editor.Tensor(
+      shape=(4, 2),
+      dtype=tflite.TensorType.INT32,
+      data=np.array([[0, 0], [1, 1], [1, 1], [0, 0]], dtype=np.int32),
+      name="const",
+    )
+    act = model_editor.Tensor(
+      shape=(1, 6, 6, 4), dtype=tflite.TensorType.FLOAT32, name="act"
+    )
+    out = model_editor.Tensor(
+      shape=(1, 8, 8, 4), dtype=tflite.TensorType.FLOAT32, name="out"
+    )
+    model = model_editor.Model(
+      subgraphs=[
+        model_editor.Subgraph(
+          tensors=[const],
+          operators=[
+            model_editor.Operator(
+              opcode=opcode, inputs=[act, const], outputs=[out]
+            )
+          ],
+        )
+      ]
+    )
+    return bytes(model.build())
+
+  _SPECS = [
+    spec.Tensor(
+      subgraph=0,
+      tensor=0,
+      compression=[
+        spec.LookUpTableCompression(index_bitwidth=1, mode=spec.PerTensor())
+      ],
+    )
+  ]
+
+  def test_refuses_a_tensor_the_kernel_needs_constant(self):
+    """PAD reads its paddings in Prepare, so compressing it must fail."""
+    with self.assertRaises(compressor.CompressionError) as caught:
+      compress.compress(self._build(tflite.BuiltinOperator.PAD), self._SPECS)
+    message = str(caught.exception)
+    self.assertIn("must stay constant", message)
+    self.assertIn("PAD", message)
+
+  def test_allows_a_convolution_filter(self):
+    """A filter at the same input position stays compressible.
+
+    Refusing on behalf of the targets whose kernels read a filter in
+    Prepare would rule out the main use of the tool.
+    """
+    compress.compress(self._build(tflite.BuiltinOperator.CONV_2D), self._SPECS)
+
+
+if __name__ == "__main__":
+  unittest.main()
