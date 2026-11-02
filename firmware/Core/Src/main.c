@@ -26,9 +26,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "model_inference.h"
 #include "state_machine.h"
 #include "feature_extraction.h"
 #include "health_fusion.h"
+#include "model.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -128,90 +130,136 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
-  /* USER CODE BEGIN 2 */
+    /* USER CODE BEGIN 2 */
   printf("\r\n\r\n");
-printf("====================================\r\n");
-printf("  SwasthEdge Boot OK\r\n");
-printf("====================================\r\n");
+  printf("====================================\r\n");
+  printf("  SwasthEdge Boot OK\r\n");
+  printf("====================================\r\n");
 
-/* Print clock configuration */
-printf("SYSCLK: %lu Hz\r\n", HAL_RCC_GetSysClockFreq());
-printf("HCLK:   %lu Hz\r\n", HAL_RCC_GetHCLKFreq());
-printf("PCLK1:  %lu Hz\r\n", HAL_RCC_GetPCLK1Freq());
-printf("PCLK2:  %lu Hz\r\n", HAL_RCC_GetPCLK2Freq());
-printf("\r\n");
+  /* Print clock configuration */
+  printf("SYSCLK: %lu Hz\r\n", HAL_RCC_GetSysClockFreq());
+  printf("HCLK:   %lu Hz\r\n", HAL_RCC_GetHCLKFreq());
+  printf("PCLK1:  %lu Hz\r\n", HAL_RCC_GetPCLK1Freq());
+  printf("PCLK2:  %lu Hz\r\n", HAL_RCC_GetPCLK2Freq());
+  printf("\r\n");
 
-/* Start timers */
-HAL_TIM_Base_Start_IT(&htim6);
-HAL_TIM_Base_Start_IT(&htim7);
-HAL_TIM_Base_Start_IT(&htim14);
-printf("Timers started: TIM6 (10Hz), TIM7 (1Hz), TIM14 (20Hz)\r\n");
-printf("\r\n");
+  /* Start timers */
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7);
+  HAL_TIM_Base_Start_IT(&htim14);
+  printf("Timers started: TIM6 (10Hz), TIM7 (1Hz), TIM14 (20Hz)\r\n");
+  printf("\r\n");
 
-/* Test feature extraction with synthetic data */
-printf("=== FEATURE EXTRACTION TEST ===\r\n");
-float test_buffer[100];
-for (int i = 0; i < 100; i++) {
-    test_buffer[i] = 25.0f + 0.5f * sinf(i * 0.1f) + 0.05f * ((i * 7) % 10 - 5);
-}
+  /* Test feature extraction with synthetic data */
+  printf("=== FEATURE EXTRACTION TEST ===\r\n");
+  float test_buffer[100];
+  for (int i = 0; i < 100; i++) {
+      test_buffer[i] = 25.0f + 0.5f * sinf(i * 0.1f) + 0.05f * ((i * 7) % 10 - 5);
+  }
 
-float features[8];
-extract_features(test_buffer, 100, features);
+  float features[8];
+  extract_features(test_buffer, 100, features);
 
-printf("  Mean:     %.3f\r\n", features[FEAT_MEAN]);
-printf("  Variance: %.5f\r\n", features[FEAT_VARIANCE]);
-printf("  Slope:    %.5f\r\n", features[FEAT_SLOPE]);
-printf("  RMS:      %.3f\r\n", features[FEAT_RMS]);
-printf("  EWMA:     %.3f\r\n", features[FEAT_EWMA]);
-printf("  CUSUM:    %.5f\r\n", features[FEAT_CUSUM]);
-printf("  Rate:     %.5f\r\n", features[FEAT_RATE]);
-printf("  Range:    %.3f\r\n", features[FEAT_RANGE]);
-printf("\r\n");
+  printf("  Mean:     %.3f\r\n", features[FEAT_MEAN]);
+  printf("  Variance: %.5f\r\n", features[FEAT_VARIANCE]);
+  printf("  Slope:    %.5f\r\n", features[FEAT_SLOPE]);
+  printf("  RMS:      %.3f\r\n", features[FEAT_RMS]);
+  printf("  EWMA:     %.3f\r\n", features[FEAT_EWMA]);
+  printf("  CUSUM:    %.5f\r\n", features[FEAT_CUSUM]);
+  printf("  Rate:     %.5f\r\n", features[FEAT_RATE]);
+  printf("  Range:    %.3f\r\n", features[FEAT_RANGE]);
+  printf("\r\n");
 
-/* Test state machine */
-printf("=== STATE MACHINE TEST ===\r\n");
-state_machine_init();
-for (float conf = 100.0f; conf >= 0.0f; conf -= 10.0f) {
-    /* Feed 3 times to satisfy consecutive readings requirement */
-    state_machine_update(conf);
-    state_machine_update(conf);
-    state_machine_update(conf);
-    printf("  Confidence %.0f%% -> %s\r\n", conf, state_machine_get_name());
-}
-printf("\r\n");
+  /* Test state machine */
+  printf("=== STATE MACHINE TEST ===\r\n");
+  state_machine_init();
+  for (float conf = 100.0f; conf >= 0.0f; conf -= 10.0f) {
+      state_machine_update(conf);
+      state_machine_update(conf);
+      state_machine_update(conf);
+      printf("  Confidence %.0f%% -> %s\r\n", conf, state_machine_get_name());
+  }
+  printf("\r\n");
 
-/* Test health fusion */
-printf("=== HEALTH FUSION TEST ===\r\n");
-float fused1 = health_fusion(100.0f, 100.0f, 100.0f, 100.0f, 100.0f);
-printf("  All healthy:             %.1f%%\r\n", fused1);
+  /* Test health fusion */
+  printf("=== HEALTH FUSION TEST ===\r\n");
+  float fused1 = health_fusion(100.0f, 100.0f, 100.0f, 100.0f, 100.0f);
+  printf("  All healthy:             %.1f%%\r\n", fused1);
+  float fused2 = health_fusion(50.0f, 100.0f, 100.0f, 100.0f, 100.0f);
+  printf("  Sensor degraded to 50:   %.1f%%\r\n", fused2);
+  float fused3 = health_fusion(50.0f, 50.0f, 100.0f, 100.0f, 100.0f);
+  printf("  Sensor + Electrical:     %.1f%%\r\n", fused3);
+  float fused4 = health_fusion(25.0f, 25.0f, 50.0f, 50.0f, 25.0f);
+  printf("  Multiple failures:       %.1f%%\r\n", fused4);
+  printf("\r\n");
 
-float fused2 = health_fusion(50.0f, 100.0f, 100.0f, 100.0f, 100.0f);
-printf("  Sensor degraded to 50:   %.1f%%\r\n", fused2);
+  /* Init state machine for main loop */
+  state_machine_init();
 
-float fused3 = health_fusion(50.0f, 50.0f, 100.0f, 100.0f, 100.0f);
-printf("  Sensor + Electrical:     %.1f%%\r\n", fused3);
+  /* ========================================== */
+  /* NEW: INITIALIZE TINYML ENGINE              */
+  /* ========================================== */
+  printf("=== TINYML INITIALIZATION ===\r\n");
+  setup_tinyml();
+  printf("TinyML Engine Ready.\r\n");
 
-float fused4 = health_fusion(25.0f, 25.0f, 50.0f, 50.0f, 25.0f);
-printf("  Multiple failures:       %.1f%%\r\n", fused4);
-printf("\r\n");
+  // Quick Sanity Test with Fake Data
+  float test_normal = run_inference(25.0f, 1.5f, 12.0f);
+  printf("MSE for Normal Data (25C, 1.5A, 12V): %.5f\r\n", test_normal);
 
-/* Init state machine for main loop */
-state_machine_init();
-printf("Setup complete. Entering main loop...\r\n");
-printf("\r\n");
+  float test_fault = run_inference(25.0f, 3.0f, 12.0f);
+  printf("MSE for Fault Data  (25C, 3.0A, 12V): %.5f\r\n", test_fault);
+
+  if (test_fault > ANOMALY_MSE_THRESHOLD) {
+      printf(">>> TINYML FAULT DETECTED! <<<\r\n");
+  }
+  printf("====================================\r\n\r\n");
+
+  printf("Setup complete. Entering main loop...\r\n");
+  printf("\r\n");
 
   /* USER CODE END 2 */
 
-  /* Infinite loop */
+      /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  static int loop_count = 0;
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* Blink user LED (PA5) every 500ms */
+    
+    // 1. Blink LED to show the board is alive
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    HAL_Delay(500);
+    
+    // 2. Simulate Sensor Readings
+    float sim_temp = 25.0f;
+    float sim_current = 1.5f; 
+    float sim_voltage = 12.0f;
+    
+    // 3. AUTOMATIC FAULT INJECTION: Every 3rd loop, spike the current to 3.0A!
+    if ((loop_count / 3) % 2 == 1) {
+        sim_current = 3.0f; 
+    }
+    loop_count++;
+
+    // 4. Run TinyML Inference
+    float mse_score = run_inference(sim_temp, sim_current, sim_voltage);
+    
+    // 5. Print the Anomaly Score
+    printf("Inputs -> T:%.1f, C:%.1f, V:%.1f | MSE: %.5f | ", 
+           sim_temp, sim_current, sim_voltage, mse_score);
+           
+    // 6. Check against Threshold
+    if (mse_score > ANOMALY_MSE_THRESHOLD) {
+        printf("STATE: CRITICAL (Fault Detected!)\r\n");
+    } else {
+        printf("STATE: NORMAL\r\n");
+    }
+    
+    // 7. Wait 2 seconds before repeating
+    HAL_Delay(2000);
+    
   }
   /* USER CODE END 3 */
 }

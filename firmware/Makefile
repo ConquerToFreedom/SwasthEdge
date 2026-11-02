@@ -67,15 +67,40 @@ App/health_fusion.c
 # Find all TFLM C++ source files
 TFLM_SOURCES = \
 $(wildcard lib/tflite-micro/tensorflow/lite/micro/*.cc) \
-$(wildcard lib/tflite-micro/tensorflow/lite/micro/kernels/*.cc)
+$(wildcard lib/tflite-micro/tensorflow/lite/micro/*/*.cc) \
+$(wildcard lib/tflite-micro/tensorflow/lite/micro/*/*/*.cc) \
+$(wildcard lib/tflite-micro/tensorflow/lite/kernels/internal/*.cc) \
+$(wildcard lib/tflite-micro/tensorflow/lite/kernels/internal/reference/*.cc) \
+$(wildcard lib/tflite-micro/tensorflow/lite/core/api/*.cc)
 
-# Exclude ALL test and helper files
+# 1. Remove duplicate file paths from the source list
+TFLM_SOURCES := $(sort $(TFLM_SOURCES))
+
+# 2. Exclude ALL test, benchmark, and helper files
 TFLM_SOURCES := $(filter-out %_test.cc, $(TFLM_SOURCES))
 TFLM_SOURCES := $(filter-out %_test_common.cc, $(TFLM_SOURCES))
 TFLM_SOURCES := $(filter-out %test_helpers.cc, $(TFLM_SOURCES))
 TFLM_SOURCES := $(filter-out %test_helper_custom_ops.cc, $(TFLM_SOURCES))
 TFLM_SOURCES := $(filter-out %mock_micro_graph.cc, $(TFLM_SOURCES))
 TFLM_SOURCES := $(filter-out %fake_micro_context.cc, $(TFLM_SOURCES))
+
+# 3. Exclude unrelated folders
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/benchmarks/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/testing/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/tools/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/examples/%, $(TFLM_SOURCES))
+
+# 4. Exclude non-ARM architectures (Xtensa, ARC, CEVA, Ethos)
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/arc_mli/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/xtensa/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/ceva/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/ethosu%, $(TFLM_SOURCES))
+
+# 5. Exclude conflicting generic kernels and test data generators
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/cmsis_nn/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/test_data_generation/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/testdata/%, $(TFLM_SOURCES))
+TFLM_SOURCES := $(filter-out lib/tflite-micro/tensorflow/lite/micro/kernels/conv_int8_reference.cc, $(TFLM_SOURCES))
 
 # Add your app's C++ file
 CXX_SOURCES = $(TFLM_SOURCES) App/model_inference.cc
@@ -192,6 +217,9 @@ OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASM_SOURCES:.s=.o)))
 vpath %.s $(sort $(dir $(ASM_SOURCES)))
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASMM_SOURCES:.S=.o)))
 vpath %.S $(sort $(dir $(ASMM_SOURCES)))
+
+# MAGIC FIX: Remove duplicate object files to prevent linker errors
+OBJECTS := $(sort $(OBJECTS))
 
 # Compile C files
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
